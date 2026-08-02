@@ -95,11 +95,10 @@ function resolveByes(list) {
   return list;
 }
 
-function makeBracket(teamIds) {
-  const shuffled = shuffle(teamIds);
+function buildBracketFromIds(ids) {
   let size = 1;
-  while (size < shuffled.length) size *= 2;
-  const padded = [...shuffled];
+  while (size < ids.length) size *= 2;
+  const padded = [...ids];
   while (padded.length < size) padded.push(null);
   const totalRounds = Math.log2(size);
   let matches = [];
@@ -123,6 +122,10 @@ function makeBracket(teamIds) {
     prevCount = count;
   }
   return resolveByes(matches);
+}
+
+function makeBracket(teamIds) {
+  return buildBracketFromIds(shuffle(teamIds));
 }
 
 function computeStandings(teamIds, matches) {
@@ -452,23 +455,81 @@ function TeamSetup({ teams, setTeams, format, numGroups, setNumGroups, onBack, o
 --------------------------------------------------------- */
 function Draw({ teams, format, numGroups, onBack, onConfirm }) {
   const [preview, setPreview] = useState(null);
+  const [seedIds, setSeedIds] = useState(null); // knockout: linear seed order incl. nulls for byes
 
+  const teamById = (id) => teams.find((t) => t.id === id);
+  const groupCount = Math.min(numGroups, Math.max(2, Math.floor(teams.length / 2)));
+  const bracketSize = (() => { let s = 1; while (s < teams.length) s *= 2; return s; })();
+
+  const buildGroupPreview = (groups) => ({
+    groups,
+    matches: groups.flatMap((g) => makeRoundRobinMatches(g.teamIds, g.name)),
+  });
+
+  // --- สุ่ม ---
   const roll = () => {
     const teamIds = teams.map((t) => t.id);
     if (format === "group") {
-      const groups = makeGroups(teamIds, Math.min(numGroups, Math.max(2, Math.floor(teams.length / 2))));
-      const matches = groups.flatMap((g) => makeRoundRobinMatches(g.teamIds, g.name));
-      setPreview({ groups, matches });
+      setPreview(buildGroupPreview(makeGroups(teamIds, groupCount)));
     } else if (format === "roundrobin") {
-      const matches = makeRoundRobinMatches(teamIds, null);
-      setPreview({ groups: [{ name: null, teamIds }], matches });
+      setPreview({ groups: [{ name: null, teamIds }], matches: makeRoundRobinMatches(teamIds, null) });
     } else {
-      const matches = makeBracket(teamIds);
-      setPreview({ groups: null, matches });
+      const shuffled = shuffle(teamIds);
+      const padded = [...shuffled];
+      while (padded.length < bracketSize) padded.push(null);
+      setSeedIds(padded);
+      setPreview({ groups: null, matches: buildBracketFromIds(padded) });
     }
   };
 
-  const teamById = (id) => teams.find((t) => t.id === id);
+  // --- จัดเอง (เริ่มจากว่าง/เรียงตามลำดับเดิม แล้วปรับเองทั้งหมด) ---
+  const startManual = () => {
+    if (format === "group") {
+      const groups = Array.from({ length: groupCount }, (_, i) => ({ name: String.fromCharCode(65 + i), teamIds: [] }));
+      setPreview(buildGroupPreview(groups));
+    } else if (format === "roundrobin") {
+      const teamIds = teams.map((t) => t.id);
+      setPreview({ groups: [{ name: null, teamIds }], matches: makeRoundRobinMatches(teamIds, null) });
+    } else {
+      const ordered = teams.map((t) => t.id);
+      while (ordered.length < bracketSize) ordered.push(null);
+      setSeedIds(ordered);
+      setPreview({ groups: null, matches: buildBracketFromIds(ordered) });
+    }
+  };
+
+  // --- ย้ายทีมไปกลุ่มอื่นด้วยตัวเอง (format: group) ---
+  const moveTeamToGroup = (teamId, newGroupName) => {
+    setPreview((prev) => {
+      if (!prev) return prev;
+      const groups = prev.groups.map((g) => ({ ...g, teamIds: g.teamIds.filter((id) => id !== teamId) }));
+      const target = groups.find((g) => g.name === newGroupName);
+      if (target) target.teamIds.push(teamId);
+      return buildGroupPreview(groups);
+    });
+  };
+
+  // --- ตั้งทีมลงตำแหน่งสายใดสายหนึ่งเอง (format: knockout) — สลับตำแหน่งกับทีมเดิมถ้าซ้ำ ---
+  const setSeedSlot = (idx, teamId) => {
+    const next = [...seedIds];
+    if (!teamId) {
+      next[idx] = null;
+    } else {
+      const otherIdx = next.indexOf(teamId);
+      if (otherIdx !== -1 && otherIdx !== idx) next[otherIdx] = next[idx];
+      next[idx] = teamId;
+    }
+    setSeedIds(next);
+    setPreview({ groups: null, matches: buildBracketFromIds(next) });
+  };
+
+  const unassigned = preview && format === "group" ? teams.filter((t) => !preview.groups.some((g) => g.teamIds.includes(t.id))) : [];
+  const canConfirmGroup = format !== "group" || unassigned.length === 0;
+
+  const selectStyle = {
+    background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text,
+    fontSize: 12.5, padding: "4px 6px", cursor: "pointer",
+  };
 
   return (
     <div style={{ maxWidth: 780, margin: "0 auto", padding: "28px 20px 80px" }}>
@@ -476,28 +537,56 @@ function Draw({ teams, format, numGroups, onBack, onConfirm }) {
         <ArrowLeft size={15} /> กลับไปแก้ทีม
       </button>
       <h2 className="tk-teko" style={{ fontSize: 34, marginBottom: 4 }}>จับสลากแบ่งคู่แข่ง</h2>
-      <p style={{ color: C.muted, fontSize: 13.5, marginBottom: 22 }}>สุ่มได้เรื่อยๆ จนกว่าจะพอใจ แล้วกดยืนยันเพื่อเริ่มแข่งขัน</p>
+      <p style={{ color: C.muted, fontSize: 13.5, marginBottom: 22 }}>สุ่มได้เรื่อยๆ หรือจัดทีมเข้ากลุ่ม/สายเองก็ได้ แล้วกดยืนยันเพื่อเริ่มแข่งขัน</p>
 
-      <div style={{ display: "flex", justifyContent: "center", marginBottom: 26 }}>
-        <Button onClick={roll} style={{ padding: "13px 28px" }}><Shuffle size={17} /> {preview ? "สุ่มใหม่" : "สุ่มจับสลาก"}</Button>
+      <div style={{ display: "flex", justifyContent: "center", gap: 10, marginBottom: 26, flexWrap: "wrap" }}>
+        <Button onClick={roll} style={{ padding: "13px 24px" }}><Shuffle size={17} /> {preview ? "สุ่มใหม่" : "สุ่มจับสลาก"}</Button>
+        <Button variant="subtle" onClick={startManual} style={{ padding: "13px 24px" }}><Pencil size={16} /> จัดเอง</Button>
       </div>
 
       {preview && format === "group" && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, marginBottom: 24 }}>
-          {preview.groups.map((g) => (
-            <div key={g.name} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
-              <div className="tk-teko" style={{ fontSize: 20, color: C.amber, marginBottom: 8 }}>กลุ่ม {g.name}</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {g.teamIds.map((tid) => <TeamTag key={tid} team={teamById(tid)} size="sm" />)}
+        <>
+          {unassigned.length > 0 && (
+            <div style={{ background: C.surface, border: `1px solid ${C.amber}55`, borderRadius: 12, padding: 14, marginBottom: 16 }}>
+              <div style={{ fontSize: 12.5, color: C.amber, fontWeight: 700, marginBottom: 10 }}>ทีมที่ยังไม่ได้จัดกลุ่ม ({unassigned.length})</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                {unassigned.map((t) => (
+                  <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, background: C.surface2, borderRadius: 8, padding: "6px 10px" }}>
+                    <TeamTag team={t} size="sm" />
+                    <select defaultValue="" onChange={(e) => e.target.value && moveTeamToGroup(t.id, e.target.value)} style={selectStyle}>
+                      <option value="" disabled>ใส่กลุ่ม...</option>
+                      {preview.groups.map((g) => <option key={g.name} value={g.name}>กลุ่ม {g.name}</option>)}
+                    </select>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
+          )}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, marginBottom: 24 }}>
+            {preview.groups.map((g) => (
+              <div key={g.name} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
+                <div className="tk-teko" style={{ fontSize: 20, color: C.amber, marginBottom: 8 }}>กลุ่ม {g.name}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {g.teamIds.map((tid) => (
+                    <div key={tid} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}><TeamTag team={teamById(tid)} size="sm" /></div>
+                      <select value={g.name} onChange={(e) => moveTeamToGroup(tid, e.target.value)} style={selectStyle}>
+                        {preview.groups.map((gg) => <option key={gg.name} value={gg.name}>{gg.name}</option>)}
+                        <option value="">เอาออก</option>
+                      </select>
+                    </div>
+                  ))}
+                  {g.teamIds.length === 0 && <div style={{ color: C.muted, fontSize: 12 }}>ยังไม่มีทีมในกลุ่มนี้</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {preview && format === "roundrobin" && (
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 24 }}>
-          <div style={{ fontSize: 13, color: C.muted, fontWeight: 700, marginBottom: 10 }}>คู่แข่งขันทั้งหมด {preview.matches.length} คู่</div>
+          <div style={{ fontSize: 13, color: C.muted, fontWeight: 700, marginBottom: 10 }}>คู่แข่งขันทั้งหมด {preview.matches.length} คู่ (ทุกทีมพบกันหมด ลำดับไม่มีผลต่อผลการแข่งขัน)</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {preview.matches.map((m) => (
               <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5 }}>
@@ -508,23 +597,40 @@ function Draw({ teams, format, numGroups, onBack, onConfirm }) {
         </div>
       )}
 
-      {preview && format === "knockout" && (
+      {preview && format === "knockout" && seedIds && (
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 24 }}>
-          <div style={{ fontSize: 13, color: C.muted, fontWeight: 700, marginBottom: 10 }}>รอบแรก</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {preview.matches.filter((m) => m.round === 1).map((m) => (
-              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5 }}>
-                <TeamTag team={teamById(m.teamAId)} size="sm" /> <span style={{ color: C.muted }}>vs</span>
-                {m.teamBId ? <TeamTag team={teamById(m.teamBId)} size="sm" /> : <span style={{ color: C.teal, fontWeight: 700 }}>บาย (ผ่านรอบอัตโนมัติ)</span>}
-              </div>
-            ))}
+          <div style={{ fontSize: 13, color: C.muted, fontWeight: 700, marginBottom: 10 }}>รอบแรก — เลือกทีมลงแต่ละช่องเองได้ (ว่าง = บาย ผ่านรอบอัตโนมัติ)</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {Array.from({ length: bracketSize / 2 }, (_, i) => i).map((i) => {
+              const idxA = i * 2, idxB = i * 2 + 1;
+              const usedElsewhere = (excludeIdx) => new Set(seedIds.filter((_, idx) => idx !== excludeIdx));
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, flexWrap: "wrap" }}>
+                  <span style={{ color: C.muted, fontSize: 11.5, width: 20 }}>{i + 1}.</span>
+                  <select value={seedIds[idxA] || ""} onChange={(e) => setSeedSlot(idxA, e.target.value || null)} style={selectStyle}>
+                    <option value="">— ว่าง (บาย) —</option>
+                    {teams.filter((t) => !usedElsewhere(idxA).has(t.id) || t.id === seedIds[idxA]).map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  <span style={{ color: C.muted }}>vs</span>
+                  <select value={seedIds[idxB] || ""} onChange={(e) => setSeedSlot(idxB, e.target.value || null)} style={selectStyle}>
+                    <option value="">— ว่าง (บาย) —</option>
+                    {teams.filter((t) => !usedElsewhere(idxB).has(t.id) || t.id === seedIds[idxB]).map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
       {preview && (
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <Button onClick={() => onConfirm(preview)}><Check size={16} /> ยืนยันและเริ่มแข่งขัน</Button>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+          <Button disabled={!canConfirmGroup} onClick={() => onConfirm(preview)}><Check size={16} /> ยืนยันและเริ่มแข่งขัน</Button>
+          {!canConfirmGroup && <span style={{ fontSize: 12, color: C.muted }}>กรุณาจัดทุกทีมลงกลุ่มก่อนยืนยัน</span>}
         </div>
       )}
     </div>
