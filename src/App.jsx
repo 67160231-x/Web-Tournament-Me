@@ -8,18 +8,17 @@ import {
    TOKENS
 --------------------------------------------------------- */
 const C = {
-  bg: "#0A0E17",
-  surface: "#131B2C",
-  surface2: "#1B2540",
-  border: "#2A3550",
-  borderLight: "#374264",
-  text: "#F1F4FA",
-  muted: "#8993AC",
-  amber: "#FFB627",
-  amberDim: "rgba(255,182,39,0.14)",
-  teal: "#00D9A3",
-  red: "#FF5D5D",
-  blue: "#5DA9FF",
+  bg: "#0A0F1C",              // สนามยามค่ำคืน — กรมท่าเข้มเกือบดำ
+  surface: "#131A2B",         // การ์ด/กล่อง — เข้มกว่าพื้นหลังเล็กน้อย มีมิติ
+  surface2: "#1B2440",        // พื้นผิวไฮไลท์/โฮเวอร์ อ่อนกว่า surface หนึ่งขั้น
+  text: "#F4F6FB",            // ตัวหนังสือหลัก ขาวนวล คมชัดบนพื้นเข้ม
+  muted: "#8B93AC",           // ตัวหนังสือรอง เทาอมฟ้า อ่านง่ายแต่ลดหลั่น
+  border: "#232D4B",          // เส้นขอบปกติ
+  borderLight: "#3A4770",     // เส้นขอบเน้น (แมตช์ที่จบแล้ว ฯลฯ)
+  amber: "#FDB022",           // สีทองไฟสปอตไลท์สนาม — สีเด่นหลักของธีม
+  amberDim: "rgba(253,176,34,0.14)", // พื้นหลังไฮไลท์สีอำพันโปร่งแสง
+  teal: "#34D399",            // เขียว (ชนะ)
+  red: "#FB7185",             // แดง (แพ้)
 };
 
 const TEAM_COLORS = ["#FFB627", "#00D9A3", "#FF5D5D", "#5DA9FF", "#C77DFF", "#FF8FB1", "#FFD23F", "#4ADE80", "#FF9F5A", "#7DD3FC"];
@@ -153,6 +152,17 @@ function computePlayerStats(teams, matches) {
   return Object.values(stats).sort((a, b) => b.total - a.total || b.assists - a.assists);
 }
 
+function useStickyState(defaultValue, key) {
+  const [value, setValue] = useState(() => {
+    const stickyValue = window.localStorage.getItem(key);
+    return stickyValue !== null ? JSON.parse(stickyValue) : defaultValue;
+  });
+  React.useEffect(() => {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  }, [key, value]);
+  return [value, setValue];
+}
+
 /* ---------------------------------------------------------
    SHARED UI
 --------------------------------------------------------- */
@@ -160,12 +170,15 @@ function FontStyles() {
   return (
     <style>{`
       @import url('https://fonts.googleapis.com/css2?family=Teko:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
-      .tk-teko { font-family: 'Teko', sans-serif; }
+      .tk-teko { font-family: 'Teko', sans-serif; letter-spacing: 0.3px; }
       .tk-mono { font-family: 'JetBrains Mono', monospace; }
-      * { font-family: 'Manrope', sans-serif; box-sizing: border-box; }
+      * { font-family: 'Manrope', sans-serif; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+      body { background: ${C.bg}; }
       ::-webkit-scrollbar { height: 8px; width: 8px; }
-      ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: ${C.borderLight}; border-radius: 4px; }
       input:focus, select:focus, button:focus-visible { outline: 2px solid ${C.amber}; outline-offset: 1px; }
+      @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
     `}</style>
   );
 }
@@ -174,10 +187,14 @@ function ScoreDisplay({ a, b, size = "md" }) {
   const sizes = { sm: 20, md: 30, lg: 52 };
   const fs = sizes[size];
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: `${fs * 0.14}px ${fs * 0.4}px` }}>
-      <span className="tk-teko" style={{ fontSize: fs, color: C.amber, textShadow: `0 0 10px ${C.amberDim}`, lineHeight: 1, minWidth: fs * 0.6, textAlign: "center" }}>{a ?? "–"}</span>
+    <div style={{
+      display: "flex", alignItems: "center", gap: 8, background: "#050810",
+      border: `1px solid ${C.border}`, borderRadius: 8, padding: `${fs * 0.14}px ${fs * 0.4}px`,
+      boxShadow: "inset 0 2px 6px rgba(0,0,0,0.5)",
+    }}>
+      <span className="tk-teko" style={{ fontSize: fs, color: C.amber, textShadow: `0 0 12px rgba(253,176,34,0.55)`, lineHeight: 1, minWidth: fs * 0.6, textAlign: "center" }}>{a ?? "–"}</span>
       <span className="tk-teko" style={{ fontSize: fs * 0.8, color: C.borderLight, lineHeight: 1 }}>:</span>
-      <span className="tk-teko" style={{ fontSize: fs, color: C.amber, textShadow: `0 0 10px ${C.amberDim}`, lineHeight: 1, minWidth: fs * 0.6, textAlign: "center" }}>{b ?? "–"}</span>
+      <span className="tk-teko" style={{ fontSize: fs, color: C.amber, textShadow: `0 0 12px rgba(253,176,34,0.55)`, lineHeight: 1, minWidth: fs * 0.6, textAlign: "center" }}>{b ?? "–"}</span>
     </div>
   );
 }
@@ -197,7 +214,7 @@ function TeamTag({ team, size = "md" }) {
 
 function Button({ children, onClick, variant = "primary", disabled, style, type = "button" }) {
   const variants = {
-    primary: { background: C.amber, color: "#1A1300", border: "1px solid " + C.amber, fontWeight: 700 },
+    primary: { background: C.amber, color: "#1A1300", border: "1px solid " + C.amber, fontWeight: 700, boxShadow: "0 4px 14px rgba(253,176,34,0.28)" },
     ghost: { background: "transparent", color: C.text, border: `1px solid ${C.border}`, fontWeight: 600 },
     subtle: { background: C.surface2, color: C.text, border: `1px solid ${C.border}`, fontWeight: 600 },
     danger: { background: "transparent", color: C.red, border: `1px solid ${C.red}55`, fontWeight: 600 },
@@ -210,7 +227,7 @@ function Button({ children, onClick, variant = "primary", disabled, style, type 
       style={{
         ...variants[variant], padding: "10px 18px", borderRadius: 10, fontSize: 14.5,
         display: "inline-flex", alignItems: "center", gap: 8, cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.45 : 1, transition: "transform 0.12s, opacity 0.12s", ...style,
+        opacity: disabled ? 0.45 : 1, transition: "transform 0.12s, opacity 0.12s, background 0.15s", ...style,
       }}
       onMouseDown={(e) => { if (!disabled) e.currentTarget.style.transform = "scale(0.97)"; }}
       onMouseUp={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
@@ -233,17 +250,39 @@ function Input(props) {
 /* ---------------------------------------------------------
    HOME
 --------------------------------------------------------- */
-function Home({ onStart }) {
+function Home({ onStart, onShowHistory, historyCount }) {
   const [format, setFormat] = useState(null);
   const [sport, setSport] = useState("football");
+  const [name, setName] = useState("");
 
   return (
     <div style={{ maxWidth: 880, margin: "0 auto", padding: "40px 20px 80px" }}>
       <div style={{ textAlign: "center", marginBottom: 44 }}>
+        <div style={{
+          width: 64, height: 64, borderRadius: "50%", margin: "0 auto 16px", display: "flex",
+          alignItems: "center", justifyContent: "center", background: C.amberDim,
+          border: `1px solid ${C.amber}55`, boxShadow: "0 0 40px rgba(253,176,34,0.25)",
+        }}>
+          <Trophy size={28} color={C.amber} />
+        </div>
         <div className="tk-teko" style={{ fontSize: 64, color: C.text, letterSpacing: 1, lineHeight: 1 }}>
           จัด<span style={{ color: C.amber }}>ทัวร์นาเมนต์</span>
         </div>
-        <p style={{ color: C.muted, fontSize: 15, marginTop: 6 }}>สร้างตารางแข่งขันฟุตบอล บาสเกตบอล พร้อมสถิติทีมและผู้เล่น</p>
+        <p style={{ color: C.muted, fontSize: 15, marginTop: 8 }}>สร้างตารางแข่งขันฟุตบอล บาสเกตบอล พร้อมสถิติทีมและผู้เล่น</p>
+        {historyCount > 0 && (
+          <button onClick={onShowHistory} style={{
+            marginTop: 14, background: "transparent", border: `1px solid ${C.border}`, color: C.muted,
+            borderRadius: 20, padding: "7px 16px", fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+            display: "inline-flex", alignItems: "center", gap: 6,
+          }}>
+            <RotateCcw size={13} /> ดูประวัติการสร้างทัวร์นาเมนต์ ({historyCount})
+          </button>
+        )}
+      </div>
+
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 13, color: C.muted, fontWeight: 700, marginBottom: 10, letterSpacing: 0.5 }}>ตั้งชื่อทัวร์นาเมนต์</div>
+        <Input placeholder="เช่น ศึกลูกหนังคืนวันศุกร์ 2026" value={name} onChange={(e) => setName(e.target.value)} style={{ padding: "13px 14px", fontSize: 15 }} />
       </div>
 
       <div style={{ marginBottom: 28 }}>
@@ -270,6 +309,8 @@ function Home({ onStart }) {
                 textAlign: "left", padding: 20, borderRadius: 14, cursor: "pointer",
                 background: active ? C.surface2 : C.surface, border: `1.5px solid ${active ? C.amber : C.border}`,
                 display: "flex", flexDirection: "column", gap: 10,
+                boxShadow: active ? "0 6px 20px rgba(253,176,34,0.14)" : "0 2px 8px rgba(0,0,0,0.2)",
+                transition: "box-shadow 0.15s, border-color 0.15s",
               }}>
                 <Icon size={22} color={active ? C.amber : C.muted} />
                 <div style={{ fontSize: 17, fontWeight: 800, color: C.text }}>{f.name}</div>
@@ -280,10 +321,11 @@ function Home({ onStart }) {
         </div>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "center" }}>
-        <Button disabled={!format} onClick={() => onStart(format, sport)} style={{ padding: "13px 32px", fontSize: 15.5 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+        <Button disabled={!format || !name.trim()} onClick={() => onStart(format, sport, name.trim())} style={{ padding: "13px 32px", fontSize: 15.5 }}>
           เริ่มสร้างทัวร์นาเมนต์ <ChevronRight size={18} />
         </Button>
+        {!name.trim() && <span style={{ fontSize: 12, color: C.muted }}>กรุณาตั้งชื่อทัวร์นาเมนต์ก่อนเริ่ม</span>}
       </div>
     </div>
   );
@@ -305,7 +347,7 @@ function TeamEditor({ team, onUpdate, onRemove }) {
   const removePlayer = (pid) => onUpdate({ ...team, players: team.players.filter((p) => p.id !== pid) });
 
   return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.2)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 14 }}>
         <TeamTag team={team} />
         <div style={{ flex: 1 }} />
@@ -492,7 +534,7 @@ function Draw({ teams, format, numGroups, onBack, onConfirm }) {
 /* ---------------------------------------------------------
    MATCH MODAL
 --------------------------------------------------------- */
-function StatRows({ team, stats, setStats, assists, setAssists, statLabel }) {
+function StatRows({ team, stats, setStats, assists, setAssists, statLabel, onUpdateTeam }) {
   return (
     <div style={{ flex: 1, minWidth: 230 }}>
       <TeamTag team={team} />
@@ -515,11 +557,71 @@ function StatRows({ team, stats, setStats, assists, setAssists, statLabel }) {
           </div>
         ))}
       </div>
+      {onUpdateTeam && <MiniPlayerEditor team={team} onUpdateTeam={onUpdateTeam} />}
     </div>
   );
 }
 
-function MatchModal({ match, teamA, teamB, sport, onClose, onSave }) {
+function MiniPlayerEditor({ team, onUpdateTeam }) {
+  const [open, setOpen] = useState(false);
+  const [pName, setPName] = useState("");
+  const [pNum, setPNum] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editNum, setEditNum] = useState("");
+
+  const addPlayer = () => {
+    if (!pName.trim()) return;
+    onUpdateTeam(team.id, (t) => ({ ...t, players: [...t.players, { id: uid(), name: pName.trim(), number: pNum.trim() }] }));
+    setPName(""); setPNum("");
+  };
+  const removePlayer = (pid) => onUpdateTeam(team.id, (t) => ({ ...t, players: t.players.filter((p) => p.id !== pid) }));
+  const startEdit = (p) => { setEditingId(p.id); setEditName(p.name); setEditNum(p.number || ""); };
+  const saveEdit = () => {
+    onUpdateTeam(team.id, (t) => ({ ...t, players: t.players.map((p) => (p.id === editingId ? { ...p, name: editName.trim() || p.name, number: editNum.trim() } : p)) }));
+    setEditingId(null);
+  };
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <button type="button" onClick={() => setOpen(!open)} style={{ background: "transparent", border: "none", color: C.amber, cursor: "pointer", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 4, padding: 0 }}>
+        <Pencil size={12} /> แก้ไข/เพิ่มรายชื่อผู้เล่น
+      </button>
+      {open && (
+        <div style={{ marginTop: 8, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: 10 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+            {team.players.map((p) => (
+              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {editingId === p.id ? (
+                  <>
+                    <Input value={editNum} onChange={(e) => setEditNum(e.target.value)} placeholder="เบอร์" style={{ width: 48, padding: "5px 6px", fontSize: 12 }} />
+                    <Input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="ชื่อ" style={{ flex: 1, padding: "5px 6px", fontSize: 12 }} onKeyDown={(e) => e.key === "Enter" && saveEdit()} />
+                    <button onClick={saveEdit} style={{ background: "transparent", border: "none", color: C.teal, cursor: "pointer" }}><Check size={13} /></button>
+                  </>
+                ) : (
+                  <>
+                    <span className="tk-mono" style={{ color: C.amber, fontSize: 11.5, width: 22 }}>{p.number || "-"}</span>
+                    <span style={{ fontSize: 12.5, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
+                    <button onClick={() => startEdit(p)} style={{ background: "transparent", border: "none", color: C.muted, cursor: "pointer" }}><Pencil size={12} /></button>
+                    <button onClick={() => removePlayer(p.id)} style={{ background: "transparent", border: "none", color: C.muted, cursor: "pointer" }}><X size={12} /></button>
+                  </>
+                )}
+              </div>
+            ))}
+            {team.players.length === 0 && <div style={{ color: C.muted, fontSize: 11.5 }}>ยังไม่มีผู้เล่น</div>}
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <Input placeholder="เบอร์" value={pNum} onChange={(e) => setPNum(e.target.value)} style={{ width: 48, padding: "6px 8px", fontSize: 12 }} />
+            <Input placeholder="เพิ่มชื่อผู้เล่นใหม่" value={pName} onChange={(e) => setPName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addPlayer()} style={{ flex: 1, padding: "6px 8px", fontSize: 12 }} />
+            <Button variant="subtle" onClick={addPlayer} style={{ padding: "6px 10px" }}><Plus size={13} /></Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MatchModal({ match, teamA, teamB, sport, onClose, onSave, onUpdateTeam }) {
   const [scoreA, setScoreA] = useState(match.scoreA ?? "");
   const [scoreB, setScoreB] = useState(match.scoreB ?? "");
   const [statsA, setStatsA] = useState({ ...match.statsA });
@@ -545,7 +647,7 @@ function MatchModal({ match, teamA, teamB, sport, onClose, onSave }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(5,7,12,0.72)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 16 }} onClick={onClose}>
-      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, width: "100%", maxWidth: 560, maxHeight: "88vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: 24, width: "100%", maxWidth: 560, maxHeight: "88vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
           <h3 className="tk-teko" style={{ fontSize: 24 }}>บันทึกผลการแข่งขัน</h3>
           <button onClick={onClose} style={{ background: "transparent", border: "none", color: C.muted, cursor: "pointer" }}><X size={20} /></button>
@@ -574,8 +676,8 @@ function MatchModal({ match, teamA, teamB, sport, onClose, onSave }) {
 
         <div style={{ fontSize: 12.5, color: C.muted, fontWeight: 700, marginBottom: 10 }}>สกอรายผู้เล่น (ไม่บังคับ)</div>
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 22 }}>
-          <StatRows team={teamA} stats={statsA} setStats={setStatsA} assists={assistsA} setAssists={setAssistsA} statLabel={unit} />
-          <StatRows team={teamB} stats={statsB} setStats={setStatsB} assists={assistsB} setAssists={setAssistsB} statLabel={unit} />
+          <StatRows team={teamA} stats={statsA} setStats={setStatsA} assists={assistsA} setAssists={setAssistsA} statLabel={unit} onUpdateTeam={onUpdateTeam} />
+          <StatRows team={teamB} stats={statsB} setStats={setStatsB} assists={assistsB} setAssists={setAssistsB} statLabel={unit} onUpdateTeam={onUpdateTeam} />
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
@@ -600,7 +702,7 @@ function MatchCard({ match, teamA, teamB, onClick }) {
       style={{
         width: "100%", textAlign: "left", background: C.surface, border: `1px solid ${match.status === "done" ? C.borderLight : C.border}`,
         borderRadius: 12, padding: 14, display: "flex", alignItems: "center", gap: 12, cursor: playable ? "pointer" : "default",
-        opacity: playable ? 1 : 0.55,
+        opacity: playable ? 1 : 0.55, boxShadow: "0 2px 8px rgba(0,0,0,0.22)",
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>{teamA ? <TeamTag team={teamA} size="sm" /> : <span style={{ color: C.muted, fontSize: 13 }}>รอทราบคู่แข่ง</span>}</div>
@@ -619,10 +721,10 @@ function MatchCard({ match, teamA, teamB, onClick }) {
 --------------------------------------------------------- */
 function StandingsTable({ rows, teamById }) {
   return (
-    <div style={{ overflowX: "auto" }}>
+    <div style={{ overflowX: "auto", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: "0 2px 8px rgba(0,0,0,0.22)", padding: "4px 10px" }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
         <thead>
-          <tr style={{ color: C.muted, textAlign: "center", borderBottom: `1px solid ${C.border}` }}>
+          <tr style={{ color: C.muted, textAlign: "center", borderBottom: `1px solid ${C.border}`, background: C.surface2 }}>
             <th style={{ padding: "8px 6px", textAlign: "left" }}>ทีม</th>
             <th style={{ padding: "8px 6px" }}>แข่ง</th>
             <th style={{ padding: "8px 6px" }}>ชนะ</th>
@@ -692,24 +794,95 @@ function PlayerStatsList({ stats, teamById, unit }) {
 }
 
 /* ---------------------------------------------------------
+   HISTORY
+--------------------------------------------------------- */
+function getTournamentChampion(record) {
+  const { teams = [], matches = [], format } = record;
+  const teamById = (id) => teams.find((t) => t.id === id);
+  const winnerOf = (m) => (m ? teamById(m.tieWinner || (m.scoreA > m.scoreB ? m.teamAId : m.teamBId)) : null);
+  if (format === "knockout") {
+    const rounds = [...new Set(matches.map((m) => m.round))];
+    if (!rounds.length) return null;
+    const maxRound = Math.max(...rounds);
+    const finalMatch = matches.find((m) => m.round === maxRound);
+    return finalMatch && finalMatch.status === "done" ? winnerOf(finalMatch) : null;
+  }
+  if (format === "group") {
+    const koMatches = matches.filter((m) => m.group === "KO");
+    if (!koMatches.length) return null;
+    const maxRound = Math.max(...koMatches.map((m) => m.round));
+    const finalMatch = koMatches.find((m) => m.round === maxRound);
+    return finalMatch && finalMatch.status === "done" ? winnerOf(finalMatch) : null;
+  }
+  return null;
+}
+
+function History({ history, onBack, onResume, onDelete }) {
+  const sorted = [...history].sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+  return (
+    <div style={{ maxWidth: 780, margin: "0 auto", padding: "28px 20px 80px" }}>
+      <button onClick={onBack} style={{ background: "transparent", border: "none", color: C.muted, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, marginBottom: 18, fontSize: 13.5 }}>
+        <ArrowLeft size={15} /> กลับ
+      </button>
+      <h2 className="tk-teko" style={{ fontSize: 34, marginBottom: 4 }}>ประวัติการสร้างทัวร์นาเมนต์</h2>
+      <p style={{ color: C.muted, fontSize: 13.5, marginBottom: 22 }}>ดูและกลับไปทำต่อกับทัวร์นาเมนต์ที่เคยสร้างไว้</p>
+
+      {sorted.length === 0 && (
+        <div style={{ color: C.muted, fontSize: 13.5, textAlign: "center", padding: 40, border: `1px dashed ${C.border}`, borderRadius: 12 }}>
+          ยังไม่มีประวัติการสร้างทัวร์นาเมนต์
+        </div>
+      )}
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {sorted.map((h) => {
+          const champion = getTournamentChampion(h);
+          const formatInfo = FORMATS.find((f) => f.id === h.format);
+          return (
+            <div key={h.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 180 }}>
+                <div style={{ fontSize: 16, fontWeight: 800 }}>{h.sport === "basketball" ? "🏀" : "⚽"} {h.name || "ทัวร์นาเมนต์ไม่มีชื่อ"}</div>
+                <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
+                  {formatInfo ? formatInfo.name : h.format} · {(h.teams || []).length} ทีม · {new Date(h.createdAt || Date.now()).toLocaleDateString("th-TH")}
+                </div>
+              </div>
+              {champion ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, color: C.amber, fontSize: 12.5, fontWeight: 700 }}>
+                  <Trophy size={14} /> {champion.name}
+                </div>
+              ) : (
+                <div style={{ fontSize: 12.5, color: C.muted }}>{(h.matches || []).length > 0 ? "กำลังแข่งขัน" : "ยังไม่เริ่มแข่ง"}</div>
+              )}
+              <Button variant="subtle" onClick={() => onResume(h)}>เปิดดู</Button>
+              <button onClick={() => onDelete(h.id)} style={{ background: "transparent", border: "none", color: C.red, cursor: "pointer", padding: 6 }}><X size={16} /></button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------
    TOURNAMENT SCREEN
 --------------------------------------------------------- */
-function Tournament({ teams, format, sport, matches, setMatches, onReset }) {
+function Tournament({ teams, setTeams, format, sport, matches, setMatches, onReset, tournamentName }) {
   const [tab, setTab] = useState("matches");
   const [activeMatch, setActiveMatch] = useState(null);
+  
+  // เพิ่ม State สำหรับเปิด Modal แก้ไขทีม
+  const [editingTeam, setEditingTeam] = useState(null); 
 
   const teamById = (id) => teams.find((t) => t.id === id);
   const unit = sport === "basketball" ? "แต้ม" : "ประตู";
 
   const saveResult = (updated) => {
     let list = matches.map((m) => (m.id === updated.id ? updated : m));
-    if (format === "knockout") {
+    if (format === "knockout" || updated.group === "KO") {
       const winner = updated.tieWinner || (updated.scoreA > updated.scoreB ? updated.teamAId : updated.teamBId);
-      const idx = list.findIndex((m) => m.id === updated.id);
       const nextRound = updated.round + 1;
       const nextSlot = Math.floor(updated.slot / 2);
       list = list.map((m) => {
-        if (m.round === nextRound && m.slot === nextSlot) {
+        if (m.group === updated.group && m.round === nextRound && m.slot === nextSlot) {
           const copy = { ...m };
           if (updated.slot % 2 === 0) copy.teamAId = winner; else copy.teamBId = winner;
           return copy;
@@ -721,11 +894,38 @@ function Tournament({ teams, format, sport, matches, setMatches, onReset }) {
     setActiveMatch(null);
   };
 
-  const groupNames = format === "group" ? [...new Set(matches.map((m) => m.group))].sort() : [null];
+  // แมตช์รอบแบ่งกลุ่ม (ไม่รวมรอบคัดออกที่ต่อยอดมาจากกลุ่ม)
+  const groupMatches = format === "group" ? matches.filter((m) => m.group && m.group !== "KO") : [];
+  const koMatches = format === "group" ? matches.filter((m) => m.group === "KO") : [];
+  const allGroupDone = groupMatches.length > 0 && groupMatches.every((m) => m.status === "done");
+
+  const startKnockoutStage = () => {
+    const names = [...new Set(groupMatches.map((m) => m.group))].sort();
+    let qualifiers = [];
+    names.forEach((g) => {
+      const ids = teams.filter((t) => groupMatches.some((m) => m.group === g && (m.teamAId === t.id || m.teamBId === t.id))).map((t) => t.id);
+      const standings = computeStandings(ids, groupMatches.filter((m) => m.group === g));
+      qualifiers.push(...standings.slice(0, 2).map((s) => s.teamId));
+    });
+    if (qualifiers.length < 2) return;
+    const bracket = makeBracket(qualifiers).map((m) => ({ ...m, group: "KO" }));
+    setMatches([...matches, ...bracket]);
+    setTab("koBracket");
+  };
+
+  const groupNames = format === "group" ? [...new Set(groupMatches.map((m) => m.group))].sort() : [null];
   const rounds = format === "knockout" ? [...new Set(matches.map((m) => m.round))].sort((a, b) => a - b) : [];
+  const koRounds = [...new Set(koMatches.map((m) => m.round))].sort((a, b) => a - b);
   const maxRound = rounds.length ? Math.max(...rounds) : null;
+  const koMaxRound = koRounds.length ? Math.max(...koRounds) : null;
   const finalMatch = format === "knockout" ? matches.find((m) => m.round === maxRound) : null;
-  const champion = finalMatch && finalMatch.status === "done" ? teamById(finalMatch.tieWinner || (finalMatch.scoreA > finalMatch.scoreB ? finalMatch.teamAId : finalMatch.teamBId)) : null;
+  const koFinalMatch = format === "group" ? koMatches.find((m) => m.round === koMaxRound) : null;
+
+  const winnerOf = (m) => (m ? teamById(m.tieWinner || (m.scoreA > m.scoreB ? m.teamAId : m.teamBId)) : null);
+  const champion =
+    format === "knockout"
+      ? (finalMatch && finalMatch.status === "done" ? winnerOf(finalMatch) : null)
+      : (koFinalMatch && koFinalMatch.status === "done" ? winnerOf(koFinalMatch) : null);
 
   const roundLabel = (r) => {
     const size = rounds.length;
@@ -736,23 +936,54 @@ function Tournament({ teams, format, sport, matches, setMatches, onReset }) {
     return `รอบ ${r}`;
   };
 
+  const koRoundLabel = (r) => {
+    const size = koRounds.length;
+    const remaining = size - r + 1;
+    if (remaining === 1) return "รอบชิงชนะเลิศ";
+    if (remaining === 2) return "รอบรองชนะเลิศ";
+    if (remaining === 3) return "รอบก่อนรองชนะเลิศ";
+    return `รอบ ${r}`;
+  };
+
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 20px 80px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, flexWrap: "wrap", gap: 10 }}>
-        <h2 className="tk-teko" style={{ fontSize: 30 }}>{sport === "basketball" ? "🏀" : "⚽"} ทัวร์นาเมนต์ของคุณ</h2>
-        <Button variant="ghost" onClick={onReset}><RotateCcw size={14} /> เริ่มทัวร์นาเมนต์ใหม่</Button>
+        <h2 className="tk-teko" style={{ fontSize: 30 }}>{sport === "basketball" ? "🏀" : "⚽"} {tournamentName || "ทัวร์นาเมนต์ของคุณ"}</h2>
+        <div style={{ display: "flex", gap: 10 }}>
+          {/* เพิ่มปุ่มแก้ไขทีมตรงนี้ */}
+          <Button variant="subtle" onClick={() => setEditingTeam(teams[0])}>
+            <Pencil size={14} /> จัดการทีม/เปลี่ยนตัว
+          </Button>
+          <Button variant="ghost" onClick={onReset}><RotateCcw size={14} /> เริ่มใหม่</Button>
+        </div>
       </div>
 
       {champion && (
-        <div style={{ background: `linear-gradient(135deg, ${C.amberDim}, transparent)`, border: `1px solid ${C.amber}55`, borderRadius: 14, padding: 20, marginBottom: 20, textAlign: "center" }}>
-          <Trophy size={30} color={C.amber} style={{ marginBottom: 6 }} />
-          <div className="tk-teko" style={{ fontSize: 28, color: C.amber }}>{champion.name} คือแชมป์!</div>
+        <div style={{
+          background: `linear-gradient(135deg, ${C.amberDim}, transparent)`, border: `1px solid ${C.amber}55`,
+          borderRadius: 14, padding: 22, marginBottom: 20, textAlign: "center",
+          boxShadow: "0 0 40px rgba(253,176,34,0.14)",
+        }}>
+          <Trophy size={32} color={C.amber} style={{ marginBottom: 8, filter: "drop-shadow(0 0 10px rgba(253,176,34,0.5))" }} />
+          <div className="tk-teko" style={{ fontSize: 30, color: C.amber, letterSpacing: 0.5 }}>{champion.name} คือแชมป์!</div>
+        </div>
+      )}
+
+      {format === "group" && koMatches.length === 0 && allGroupDone && (
+        <div style={{
+          background: `linear-gradient(135deg, ${C.amberDim}, transparent)`, border: `1px solid ${C.amber}55`,
+          borderRadius: 14, padding: 20, marginBottom: 20, textAlign: "center",
+        }}>
+          <div style={{ fontSize: 14, color: C.text, marginBottom: 12, fontWeight: 700 }}>
+            รอบแบ่งกลุ่มจบแล้ว! พร้อมเข้าสู่รอบคัดออก (2 ทีมอันดับต้นของแต่ละกลุ่ม)
+          </div>
+          <Button onClick={startKnockoutStage}><Trophy size={16} /> เริ่มรอบคัดออก</Button>
         </div>
       )}
 
       <div style={{ display: "flex", gap: 8, marginBottom: 22, borderBottom: `1px solid ${C.border}`, paddingBottom: 12 }}>
-        {["matches", format === "knockout" ? "bracket" : "standings", "players"].map((tId) => {
-          const labels = { matches: "การแข่งขัน", bracket: "สายการแข่งขัน", standings: "ตารางคะแนน", players: "สถิติผู้เล่น" };
+        {["matches", format === "knockout" ? "bracket" : "standings", ...(koMatches.length > 0 ? ["koBracket"] : []), "players"].map((tId) => {
+          const labels = { matches: "การแข่งขัน", bracket: "สายการแข่งขัน", standings: "ตารางคะแนน", koBracket: "รอบคัดออก", players: "สถิติผู้เล่น" };
           const active = tab === tId;
           return (
             <button key={tId} onClick={() => setTab(tId)} style={{
@@ -817,6 +1048,19 @@ function Tournament({ teams, format, sport, matches, setMatches, onReset }) {
         </div>
       )}
 
+      {tab === "koBracket" && (
+        <div style={{ display: "flex", gap: 20, overflowX: "auto", paddingBottom: 10 }}>
+          {koRounds.map((r) => (
+            <div key={r} style={{ minWidth: 220, display: "flex", flexDirection: "column", gap: 14, justifyContent: "center" }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: C.muted, textAlign: "center" }}>{koRoundLabel(r)}</div>
+              {koMatches.filter((m) => m.round === r).map((m) => (
+                <MatchCard key={m.id} match={m} teamA={teamById(m.teamAId)} teamB={teamById(m.teamBId)} onClick={() => setActiveMatch(m)} />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
       {tab === "players" && <PlayerStatsList stats={computePlayerStats(teams, matches)} teamById={teamById} unit={unit} />}
 
       {activeMatch && (
@@ -827,7 +1071,44 @@ function Tournament({ teams, format, sport, matches, setMatches, onReset }) {
           sport={sport}
           onClose={() => setActiveMatch(null)}
           onSave={saveResult}
+          onUpdateTeam={(teamId, updater) => setTeams(teams.map((t) => (t.id === teamId ? updater(t) : t)))}
         />
+      )}
+
+      {/* เพิ่ม Modal แก้ไขทีม ตรงนี้ */}
+      {editingTeam && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(5,7,12,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 20 }}>
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, padding: 24, borderRadius: 16, width: "100%", maxWidth: 600, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+              <h3 className="tk-teko" style={{ fontSize: 24 }}>เลือกทีมที่ต้องการแก้ไข</h3>
+              <button onClick={() => setEditingTeam(null)} style={{ background: "transparent", border: "none", color: C.muted, cursor: "pointer" }}><X size={24} /></button>
+            </div>
+            
+            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 16, marginBottom: 16 }}>
+              {teams.map(t => (
+                <button key={t.id} onClick={() => setEditingTeam(t)} style={{
+                  padding: "8px 16px", borderRadius: 8, border: `1px solid ${editingTeam.id === t.id ? C.amber : C.border}`,
+                  background: editingTeam.id === t.id ? C.amberDim : C.surface, color: C.text, cursor: "pointer", whiteSpace: "nowrap"
+                }}>
+                  {t.name}
+                </button>
+              ))}
+            </div>
+
+            <TeamEditor 
+              team={editingTeam} 
+              onUpdate={(updatedTeam) => {
+                setEditingTeam(updatedTeam);
+                setTeams(teams.map(t => t.id === updatedTeam.id ? updatedTeam : t));
+              }} 
+              onRemove={() => alert("ระบบไม่อนุญาตให้ลบทีมทิ้งระหว่างการแข่งขัน")}
+            />
+            
+            <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end" }}>
+              <Button onClick={() => setEditingTeam(null)}><Check size={16} /> เสร็จสิ้น</Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -837,22 +1118,79 @@ function Tournament({ teams, format, sport, matches, setMatches, onReset }) {
    APP ROOT
 --------------------------------------------------------- */
 export default function App() {
-  const [screen, setScreen] = useState("home");
-  const [format, setFormat] = useState(null);
-  const [sport, setSport] = useState("football");
-  const [teams, setTeams] = useState([]);
-  const [numGroups, setNumGroups] = useState(2);
-  const [matches, setMatches] = useState([]);
+  const [screen, setScreen] = useStickyState("home", "app_screen");
+  const [format, setFormat] = useStickyState(null, "app_format");
+  const [sport, setSport] = useStickyState("football", "app_sport");
+  const [teams, setTeams] = useStickyState([], "app_teams");
+  const [numGroups, setNumGroups] = useStickyState(2, "app_numGroups");
+  const [matches, setMatches] = useStickyState([], "app_matches");
+  const [tournamentName, setTournamentName] = useStickyState("", "app_tournamentName");
+  const [history, setHistory] = useStickyState([], "app_history");
+  const [currentId, setCurrentId] = useStickyState(null, "app_currentId");
+
+  // บันทึก/อัปเดตทัวร์นาเมนต์ปัจจุบันลงในประวัติทุกครั้งที่มีการเปลี่ยนแปลง
+  React.useEffect(() => {
+    if (!currentId) return;
+    setHistory((prev) => {
+      const idx = prev.findIndex((h) => h.id === currentId);
+      const now = Date.now();
+      const snapshot = { id: currentId, name: tournamentName, sport, format, teams, matches, numGroups, updatedAt: now };
+      if (idx === -1) return [...prev, { ...snapshot, createdAt: now }];
+      const copy = [...prev];
+      copy[idx] = { ...copy[idx], ...snapshot };
+      return copy;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentId, tournamentName, sport, format, teams, matches, numGroups]);
 
   const reset = () => {
-    setScreen("home"); setFormat(null); setTeams([]); setMatches([]); setNumGroups(2);
+    if (window.confirm("คุณต้องการลบข้อมูลการแข่งขันทั้งหมดและเริ่มใหม่ใช่หรือไม่?")) {
+      setScreen("home"); setFormat(null); setTeams([]); setMatches([]); setNumGroups(2);
+      setTournamentName(""); setCurrentId(null);
+    }
+  };
+
+  const startNewTournament = (f, s, name) => {
+    setFormat(f); setSport(s); setTournamentName(name);
+    setTeams([]); setMatches([]); setNumGroups(2);
+    setCurrentId(uid());
+    setScreen("setup");
+  };
+
+  const resumeTournament = (h) => {
+    setCurrentId(h.id); setTournamentName(h.name || ""); setFormat(h.format); setSport(h.sport);
+    setTeams(h.teams || []); setMatches(h.matches || []); setNumGroups(h.numGroups || 2);
+    setScreen((h.matches || []).length > 0 ? "tournament" : "setup");
+  };
+
+  const deleteHistoryEntry = (id) => {
+    setHistory(history.filter((h) => h.id !== id));
+    if (id === currentId) { setCurrentId(null); }
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text }}>
+    <div style={{
+      minHeight: "100vh", color: C.text,
+      background: `radial-gradient(ellipse 900px 480px at 50% -8%, rgba(253,176,34,0.09), transparent 60%),
+                   radial-gradient(ellipse 700px 420px at 105% 8%, rgba(52,211,153,0.055), transparent 60%),
+                   ${C.bg}`,
+      backgroundAttachment: "fixed",
+    }}>
       <FontStyles />
       {screen === "home" && (
-        <Home onStart={(f, s) => { setFormat(f); setSport(s); setScreen("setup"); }} />
+        <Home
+          onStart={startNewTournament}
+          onShowHistory={() => setScreen("history")}
+          historyCount={history.length}
+        />
+      )}
+      {screen === "history" && (
+        <History
+          history={history}
+          onBack={() => setScreen("home")}
+          onResume={resumeTournament}
+          onDelete={deleteHistoryEntry}
+        />
       )}
       {screen === "setup" && (
         <TeamSetup
@@ -870,7 +1208,16 @@ export default function App() {
         />
       )}
       {screen === "tournament" && (
-        <Tournament teams={teams} format={format} sport={sport} matches={matches} setMatches={setMatches} onReset={reset} />
+        <Tournament 
+          teams={teams} 
+          setTeams={setTeams} 
+          format={format} 
+          sport={sport} 
+          matches={matches} 
+          setMatches={setMatches} 
+          onReset={reset} 
+          tournamentName={tournamentName}
+        />
       )}
     </div>
   );
